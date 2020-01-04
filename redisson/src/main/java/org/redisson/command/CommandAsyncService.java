@@ -354,8 +354,11 @@ public class CommandAsyncService implements CommandAsyncExecutor {
     }
 
     private NodeSource getNodeSource(String key) {
+        // 通过 key 计算位于集群中的哪一个 slot 中
         int slot = connectionManager.calcSlot(key);
+        // 根据 slot 获取对应的 Master 实例
         MasterSlaveEntry entry = connectionManager.getEntry(slot);
+        // 构建一个 NodeSource 返回，将节点和slot的值封装进去
         return new NodeSource(entry, slot);
     }
 
@@ -418,6 +421,7 @@ public class CommandAsyncService implements CommandAsyncExecutor {
 
     @Override
     public <T, R> RFuture<R> evalWriteAsync(String key, Codec codec, RedisCommand<T> evalCommandType, String script, List<Object> keys, Object... params) {
+        // 通过 key 获取一个 NodeSource
         NodeSource source = getNodeSource(key);
         return evalAsync(source, false, codec, evalCommandType, script, keys, params);
     }

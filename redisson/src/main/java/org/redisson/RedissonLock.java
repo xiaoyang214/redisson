@@ -124,6 +124,7 @@ public class RedissonLock extends RedissonExpirable implements RLock {
         super(commandExecutor, name);
         this.commandExecutor = commandExecutor;
         this.id = commandExecutor.getConnectionManager().getId();
+        // 获取 watchDogTime
         this.internalLockLeaseTime = commandExecutor.getConnectionManager().getCfg().getLockWatchdogTimeout();
         this.entryName = id + ":" + name;
         this.pubSub = commandExecutor.getConnectionManager().getSubscribeService().getLockPubSub();
@@ -138,6 +139,7 @@ public class RedissonLock extends RedissonExpirable implements RLock {
     }
 
     protected String getLockName(long threadId) {
+        // 当前客户端的唯一 UUID
         return id + ":" + threadId;
     }
 
@@ -340,9 +342,13 @@ public class RedissonLock extends RedissonExpirable implements RLock {
     }
 
     <T> RFuture<T> tryLockInnerAsync(long leaseTime, TimeUnit unit, long threadId, RedisStrictCommand<T> command) {
+        // 默认 watchDog 时间，300000ms
         internalLockLeaseTime = unit.toMillis(leaseTime);
 
         return commandExecutor.evalWriteAsync(getName(), LongCodec.INSTANCE, command,
+                  // keys[1] = Collections.<Object>singletonList(getName())
+                  // ARGV[1] = internalLockLeaseTime
+                  // ARGV[2] = getLockName(threadId)
                   "if (redis.call('exists', KEYS[1]) == 0) then " +
                       "redis.call('hset', KEYS[1], ARGV[2], 1); " +
                       "redis.call('pexpire', KEYS[1], ARGV[1]); " +

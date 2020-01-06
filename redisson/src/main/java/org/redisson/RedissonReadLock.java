@@ -58,11 +58,23 @@ public class RedissonReadLock extends RedissonLock implements RLock {
         internalLockLeaseTime = unit.toMillis(leaseTime);
 
         return commandExecutor.evalWriteAsync(getName(), LongCodec.INSTANCE, command,
+                                // Arrays.<Object>asList(
+                                //  getName(), 锁名
+                                //  getReadWriteTimeoutNamePrefix(threadId) ： {keyName}:UUID:thread_01:rwlock_timeout
+                                // )
+                                // ARGV:
+                                //  internalLockLeaseTime,
+                                //  getLockName(threadId),  UUID:threadId
+                                //  getWriteLockName(threadId) UUID:thread:write
                                 "local mode = redis.call('hget', KEYS[1], 'mode'); " +
                                 "if (mode == false) then " +
+                                  // hset mode = read
                                   "redis.call('hset', KEYS[1], 'mode', 'read'); " +
+                                  // 设置重入次数
                                   "redis.call('hset', KEYS[1], ARGV[2], 1); " +
+                                  // {keyName}:UUID:thread_01:rwlock_timeout:1 = 1
                                   "redis.call('set', KEYS[2] .. ':1', 1); " +
+                                  // 设置过期时间
                                   "redis.call('pexpire', KEYS[2] .. ':1', ARGV[1]); " +
                                   "redis.call('pexpire', KEYS[1], ARGV[1]); " +
                                   "return nil; " +
@@ -140,19 +152,28 @@ public class RedissonReadLock extends RedissonLock implements RLock {
     @Override
     protected RFuture<Boolean> renewExpirationAsync(long threadId) {
         String timeoutPrefix = getReadWriteTimeoutNamePrefix(threadId);
+        // {lockName}
         String keyPrefix = getKeyPrefix(threadId, timeoutPrefix);
         
         return commandExecutor.evalWriteAsync(getName(), LongCodec.INSTANCE, RedisCommands.EVAL_BOOLEAN,
+                // KEYS
+                // lockName, {lockName}
+                // ARGV
+                //  300000ms, UUID:threadId
+                // 获取 lockName - UUID:threadId 的重入次数，如果存在，执行，不存在，结束，返回 0
                 "local counter = redis.call('hget', KEYS[1], ARGV[2]); " +
                 "if (counter ~= false) then " +
+                    // 重新设置锁的过期时间
                     "redis.call('pexpire', KEYS[1], ARGV[1]); " +
-                    
+                    // KEYS[1] 中的 key-value 的对数 > 1
                     "if (redis.call('hlen', KEYS[1]) > 1) then " +
+                        // 获取所有的 key, 对所有的 counter 进行重新这是锁的过期时间
                         "local keys = redis.call('hkeys', KEYS[1]); " + 
                         "for n, key in ipairs(keys) do " + 
                             "counter = tonumber(redis.call('hget', KEYS[1], key)); " + 
                             "if type(counter) == 'number' then " + 
-                                "for i=counter, 1, -1 do " + 
+                                "for i=counter, 1, -1 do " +
+                                    // {lockName}:UUID:threadId:rwlock_timeout:n = 30000m
                                     "redis.call('pexpire', KEYS[2] .. ':' .. key .. ':rwlock_timeout:' .. i, ARGV[1]); " + 
                                 "end; " + 
                             "end; " + 

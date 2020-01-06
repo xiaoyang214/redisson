@@ -55,6 +55,8 @@ public class RedissonWriteLock extends RedissonLock implements RLock {
         internalLockLeaseTime = unit.toMillis(leaseTime);
 
         return commandExecutor.evalWriteAsync(getName(), LongCodec.INSTANCE, command,
+                            // KEYS: anyLock
+                            // ARGS: 30000ms, UUID:threadId:write
                             "local mode = redis.call('hget', KEYS[1], 'mode'); " +
                             "if (mode == false) then " +
                                   "redis.call('hset', KEYS[1], 'mode', 'write'); " +

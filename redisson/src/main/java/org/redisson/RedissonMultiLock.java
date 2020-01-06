@@ -274,6 +274,9 @@ public class RedissonMultiLock implements RLock {
 
     @Override
     public void lockInterruptibly(long leaseTime, TimeUnit unit) throws InterruptedException {
+        // leaseTime = -1
+        // baseWaitTime = N * 1500
+        // waitTime = baseWaitTime = n * 1500
         long baseWaitTime = locks.size() * 1500;
         long waitTime = -1;
         if (leaseTime == -1) {
@@ -289,7 +292,9 @@ public class RedissonMultiLock implements RLock {
                 waitTime = ThreadLocalRandom.current().nextLong(baseWaitTime, waitTime);
             }
         }
-        
+        // leaseTime = -1
+        // baseWaitTime = N * 1500
+        // waitTime = baseWaitTime = n * 1500
         while (true) {
             if (tryLock(waitTime, leaseTime, TimeUnit.MILLISECONDS)) {
                 return;
@@ -364,14 +369,17 @@ public class RedissonMultiLock implements RLock {
                 newLeaseTime = unit.toMillis(waitTime)*2;
             }
         }
-        
+        // waitTime = n * 1500
+        // leaseTime = -1
+        // newLeaseTime = -1
         long time = System.currentTimeMillis();
         long remainTime = -1;
         if (waitTime != -1) {
             remainTime = unit.toMillis(waitTime);
         }
+        // lockWaitTime = remainTime = waitTime = n * 1500
         long lockWaitTime = calcLockWaitTime(remainTime);
-        
+        // failedLocksLimit = 0
         int failedLocksLimit = failedLocksLimit();
         List<RLock> acquiredLocks = new ArrayList<>(locks.size());
         for (ListIterator<RLock> iterator = locks.listIterator(); iterator.hasNext();) {
@@ -382,6 +390,7 @@ public class RedissonMultiLock implements RLock {
                     lockAcquired = lock.tryLock();
                 } else {
                     long awaitTime = Math.min(lockWaitTime, remainTime);
+                    // newLeaseTime 传入的是 -1，会启动 watchDog 调度任务, 直到获取锁或者超时
                     lockAcquired = lock.tryLock(awaitTime, newLeaseTime, TimeUnit.MILLISECONDS);
                 }
             } catch (RedisResponseTimeoutException e) {
@@ -417,6 +426,7 @@ public class RedissonMultiLock implements RLock {
             if (remainTime != -1) {
                 remainTime -= System.currentTimeMillis() - time;
                 time = System.currentTimeMillis();
+                // 如果获取锁的时间，已经超过了预期的获取锁的时间，就会操作将已经获取到的锁全部释放掉，会走 while true 逻辑，重新 tryLock
                 if (remainTime <= 0) {
                     unlockInner(acquiredLocks);
                     return false;
